@@ -1,0 +1,7 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="add_circle.png">../img/add_circle.png</file>
+        <file alias="sync.png">../img/sync.png</file>
+        <file alias="sync_disabled.png">../img/sync_disabled.png</file>
+    </qresource>
+</RCC>
