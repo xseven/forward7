@@ -7,6 +7,9 @@ class QListWidget;
 class QState;
 class QStateMachine;
 
+struct ForwardRule;
+class ForwardWorker;
+
 namespace pcpp {
 class PcapLiveDevice;
 }
@@ -29,6 +32,8 @@ private:
     void runForwarding();
     void stopForwarding();
 
+    [[nodiscrad]] std::vector<ForwardRule> rules() const;
+
 private:
     struct {
         QListWidget* rules;
@@ -39,12 +44,13 @@ private:
         QAction* addRule;
     } action;
 
-    QStateMachine* stateMachine;
+    QStateMachine* stateMachine { nullptr };
 
     struct {
-        QState* running;
         QState* idle;
+        QState* setup;
+        QState* running;
     } state;
 
-    std::vector<pcpp::PcapLiveDevice*> ifaces;
+    ForwardWorker* forwardWorker { nullptr };
 };

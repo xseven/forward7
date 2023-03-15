@@ -36,6 +36,9 @@ addruledialog.h
 addruledialog.cpp
 
 forward_rule.h
+
+forwardworker.h
+forwardworker.cpp
 )
 list(TRANSFORM FORWARD_SRC PREPEND src/)
 

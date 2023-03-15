@@ -1,9 +1,14 @@
 #include "mainwindow.h"
 
 #include "addruledialog.h"
+#include "forwardworker.h"
 
+#if 0
+#include "EthLayer.h"
 #include "IPv4Layer.h"
+#include "NetworkUtils.h"
 #include "PcapLiveDeviceList.h"
+#endif
 
 #include <QBoxLayout>
 #include <QDockWidget>
@@ -13,6 +18,7 @@
 #include <QStateMachine>
 #include <QToolBar>
 
+#if 0
 namespace {
 std::map<QString, ForwardRule> ifaceRulesMap;
 
@@ -26,23 +32,46 @@ void onPacket(pcpp::RawPacket* rawPacket, pcpp::PcapLiveDevice* dev, void* cooki
     pcpp::Packet packet(rawPacket);
 
     if (packet.isPacketOfType(pcpp::UDP)) {
+
+        pcpp::MacAddress destMac;
+
         auto ip4Layer = packet.getLayerOfType<pcpp::IPv4Layer>();
         if (ip4Layer) {
             ip4Layer->setDstIPv4Address(pcpp::IPv4Address(rule.destinationIp4.toString().toStdString()));
             ip4Layer->setSrcIPv4Address(destIface->getIPv4Address());
-            packet.computeCalculateFields();
 
-            if (!destIface->isOpened())
-                destIface->open();
+            double arpRespTime { 0 };
 
-            destIface->sendPacket(&packet);
+            destMac = pcpp::NetworkUtils::getInstance().getMacAddress(
+                pcpp::IPv4Address(rule.destinationIp4.toString().toStdString()),
+                destIface,
+                arpRespTime,
+                destIface->getMacAddress(),
+                destIface->getIPv4Address(),
+                5);
         }
+
+        auto ethLayer = packet.getLayerOfType<pcpp::EthLayer>();
+        if (ethLayer) {
+            ethLayer->setSourceMac(destIface->getMacAddress());
+
+            ethLayer->setDestMac(destMac);
+        }
+
+        packet.computeCalculateFields();
+
+        if (!destIface->isOpened())
+            destIface->open();
+
+        destIface->sendPacket(&packet);
     }
 }
 }
+#endif
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
+    , forwardWorker(new ForwardWorker(this))
 {
     setupUi();
     setupUiConnections();
@@ -88,20 +117,33 @@ void MainWindow::setupUiConnections()
 
 void MainWindow::setupStateMachine()
 {
+    //[]
     state.idle = new QState();
 
-    state.idle->assignProperty(action.switchState, "text", "Click me");
-    state.idle->assignProperty(action.addRule, "enabled", "true");
+    state.idle->assignProperty(action.addRule, "enabled", true);
+    state.idle->assignProperty(action.switchState, "icon", QIcon(":/sync.png"));
+    state.idle->assignProperty(action.switchState, "text", tr("Start forwarding"));
 
+    //[]
+    state.setup = new QState();
+
+    //[]
     state.running = new QState();
-    state.running->assignProperty(action.addRule, "enabled", "false");
 
-    state.idle->addTransition(action.switchState, &QAction::triggered, state.running);
+    state.running->assignProperty(action.addRule, "enabled", false);
+    state.running->assignProperty(action.switchState, "icon", QIcon(":/sync_disabled.png"));
+    state.running->assignProperty(action.switchState, "text", tr("Stop forwarding"));
+
+    //[]
+    state.idle->addTransition(action.switchState, &QAction::triggered, state.setup);
+    state.setup->addTransition(forwardWorker, &ForwardWorker::setupFinished, state.running);
     state.running->addTransition(action.switchState, &QAction::triggered, state.idle);
 
+    //[]
     stateMachine = new QStateMachine(this);
 
     stateMachine->addState(state.idle);
+    stateMachine->addState(state.setup);
     stateMachine->addState(state.running);
 
     stateMachine->setInitialState(state.idle);
@@ -111,8 +153,11 @@ void MainWindow::setupStateMachine()
 
 void MainWindow::setupStateMachineConnections()
 {
-    connect(state.running, &QState::entered, this, &MainWindow::runForwarding);
     connect(state.idle, &QState::entered, this, &MainWindow::stopForwarding);
+    connect(state.setup, &QState::entered, this, [this]() {
+        forwardWorker->setupRules(rules());
+    });
+    connect(state.running, &QState::entered, this, &MainWindow::runForwarding);
 }
 
 void MainWindow::addRule()
@@ -132,11 +177,9 @@ void MainWindow::addRule()
 
 void MainWindow::runForwarding()
 {
-    for (int i = 0; i < ui.rules->count(); ++i) {
-        auto rule = ui.rules->item(i)->data(Qt::UserRole).value<ForwardRule>();
-        ifaceRulesMap.insert({ rule.sourceInterfaceName.toString(), rule });
-    }
+    forwardWorker->startForwarding();
 
+#if 0
     for (const auto& i : ifaceRulesMap) {
         auto iface = pcpp::PcapLiveDeviceList::getInstance().getPcapLiveDeviceByName(i.first.toStdString());
 
@@ -146,12 +189,12 @@ void MainWindow::runForwarding()
                 continue;
             }
 
-            pcpp::PortFilter portFilter(27480, pcpp::SRC_OR_DST);
+            // pcpp::PortFilter portFilter(27480, pcpp::SRC_OR_DST);
             pcpp::ProtoFilter protocolFilter(pcpp::UDP);
 
             pcpp::AndFilter andFilter;
 
-            andFilter.addFilter(&portFilter);
+            // andFilter.addFilter(&portFilter);
             andFilter.addFilter(&protocolFilter);
 
             iface->setFilter(andFilter);
@@ -162,13 +205,29 @@ void MainWindow::runForwarding()
             }
         }
     }
+#endif
 }
 
 void MainWindow::stopForwarding()
 {
+    forwardWorker->stopForwarding();
+#if 0
     for (const auto& i : ifaceRulesMap) {
         auto iface = pcpp::PcapLiveDeviceList::getInstance().getPcapLiveDeviceByName(i.first.toStdString());
         iface->stopCapture();
         iface->close();
     }
+#endif
+}
+
+std::vector<ForwardRule> MainWindow::rules() const
+{
+    std::vector<ForwardRule> res;
+    res.reserve(ui.rules->count());
+
+    for (int i = 0; i < ui.rules->count(); ++i) {
+        res.push_back(ui.rules->item(i)->data(Qt::UserRole).value<ForwardRule>());
+    }
+
+    return res;
 }
