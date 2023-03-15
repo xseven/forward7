@@ -6,19 +6,19 @@ class QAction;
 class QListWidget;
 class QState;
 class QStateMachine;
+class QPlainTextEdit;
 
 struct ForwardRule;
 class ForwardWorker;
-
-namespace pcpp {
-class PcapLiveDevice;
-}
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
     MainWindow(QWidget* parent = nullptr);
+
+protected:
+    bool event(QEvent* event) override final;
 
 private:
     void setupUi();
@@ -36,9 +36,12 @@ private:
 
     [[nodiscrad]] std::vector<ForwardRule> rules() const;
 
+    void addLogMessage(const QString& message);
+
 private:
     struct {
         QListWidget* rules;
+        QPlainTextEdit* log;
     } ui;
 
     struct {

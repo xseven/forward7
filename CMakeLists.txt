@@ -39,6 +39,8 @@ forward_rule.h
 
 forwardworker.h
 forwardworker.cpp
+
+logeventfilter.h
 )
 list(TRANSFORM FORWARD_SRC PREPEND src/)
 

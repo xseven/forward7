@@ -2,6 +2,7 @@
 
 #include "addruledialog.h"
 #include "forwardworker.h"
+#include "logeventfilter.h"
 
 #if 0
 #include "EthLayer.h"
@@ -11,11 +12,14 @@
 #endif
 
 #include <QBoxLayout>
+#include <QCoreApplication>
 #include <QDockWidget>
 #include <QLabel>
 #include <QListWidget>
 #include <QMenu>
 #include <QMessageBox>
+#include <QPlainTextEdit>
+#include <QScrollBar>
 #include <QStateMachine>
 #include <QToolBar>
 
@@ -110,6 +114,11 @@ void MainWindow::setupUi()
         rulesDocker->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
         addDockWidget(Qt::LeftDockWidgetArea, rulesDocker);
     }
+
+    //[]
+    ui.log = new QPlainTextEdit(this);
+    ui.log->setReadOnly(true);
+    setCentralWidget(ui.log);
 }
 
 void MainWindow::setupUiConnections()
@@ -158,6 +167,8 @@ void MainWindow::setupStateMachineConnections()
 {
     connect(state.idle, &QState::entered, this, &MainWindow::stopForwarding);
     connect(state.setup, &QState::entered, this, [this]() {
+        qDebug() << "Setup state";
+
         forwardWorker->setupRules(rules());
     });
     connect(state.running, &QState::entered, this, &MainWindow::runForwarding);
@@ -169,6 +180,7 @@ void MainWindow::addRule()
 
     if (addRuleDialog.exec() == QDialog::Accepted) {
         auto rule = addRuleDialog.rule();
+        qDebug() << rule.toString();
 
         auto item = new QListWidgetItem();
         item->setText(rule.name);
@@ -180,6 +192,8 @@ void MainWindow::addRule()
 
 void MainWindow::runForwarding()
 {
+    qDebug() << "Forwarding state";
+
     forwardWorker->startForwarding();
 
 #if 0
@@ -213,6 +227,8 @@ void MainWindow::runForwarding()
 
 void MainWindow::stopForwarding()
 {
+    qDebug() << "Idle state";
+
     forwardWorker->stopForwarding();
 #if 0
     for (const auto& i : ifaceRulesMap) {
@@ -252,4 +268,23 @@ void MainWindow::rulesContextMenu(const QPoint& pt)
     deleteRuleAction->setEnabled(state.idle->active() && ui.rules->count() > 0);
 
     rulesMenu.exec(globalPos);
+}
+
+void MainWindow::addLogMessage(const QString& message)
+{
+    ui.log->appendPlainText(message);
+    // ui.log->verticalScrollBar()->setValue(ui.log->verticalScrollBar()->maximum());
+
+    QCoreApplication::processEvents();
+}
+
+bool MainWindow::event(QEvent* event)
+{
+    if (event->type() == LogEvent::logEventType) {
+        auto logEvent = static_cast<LogEvent*>(event);
+        addLogMessage(logEvent->message());
+        return true;
+    }
+
+    return QWidget::event(event);
 }
