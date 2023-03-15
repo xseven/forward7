@@ -32,6 +32,8 @@ private:
     void runForwarding();
     void stopForwarding();
 
+    void rulesContextMenu(const QPoint& pt);
+
     [[nodiscrad]] std::vector<ForwardRule> rules() const;
 
 private:

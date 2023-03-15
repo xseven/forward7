@@ -14,6 +14,7 @@
 #include <QDockWidget>
 #include <QLabel>
 #include <QListWidget>
+#include <QMenu>
 #include <QMessageBox>
 #include <QStateMachine>
 #include <QToolBar>
@@ -96,6 +97,7 @@ void MainWindow::setupUi()
             auto rulesWidget = new QWidget(rulesDocker);
             auto rulesLabel = new QLabel(tr("Forwarding rules"), rulesWidget);
             ui.rules = new QListWidget(rulesWidget);
+            ui.rules->setContextMenuPolicy(Qt::CustomContextMenu);
 
             rulesWidget->setLayout(new QVBoxLayout);
 
@@ -113,6 +115,7 @@ void MainWindow::setupUi()
 void MainWindow::setupUiConnections()
 {
     connect(action.addRule, &QAction::triggered, this, &MainWindow::addRule);
+    connect(ui.rules, &QListWidget::customContextMenuRequested, this, &MainWindow::rulesContextMenu);
 }
 
 void MainWindow::setupStateMachine()
@@ -230,4 +233,23 @@ std::vector<ForwardRule> MainWindow::rules() const
     }
 
     return res;
+}
+
+void MainWindow::rulesContextMenu(const QPoint& pt)
+{
+    auto globalPos = ui.rules->mapToGlobal(pt);
+
+    QMenu rulesMenu;
+
+    auto addRuleAction = rulesMenu.addAction("Add", this, &MainWindow::addRule);
+
+    auto deleteRuleAction = rulesMenu.addAction("Remove", this, [this]() {
+        auto index = ui.rules->currentIndex();
+        ui.rules->takeItem(index.row());
+    });
+
+    addRuleAction->setEnabled(state.idle->active());
+    deleteRuleAction->setEnabled(state.idle->active() && ui.rules->count() > 0);
+
+    rulesMenu.exec(globalPos);
 }

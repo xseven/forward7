@@ -73,8 +73,9 @@ void AddRuleDialog::setupUiConnections()
 
         auto device = pcpp::PcapLiveDeviceList::getInstance().getPcapLiveDeviceByName(ifaceName);
 
-        if (device)
-            qDebug() << QString::fromStdString(device->getIPv4Address().toString());
+        if (device) {
+            ui.destinationIp4->setText(QString::fromStdString(device->getIPv4Address().toString()));
+        }
     });
 }
 
