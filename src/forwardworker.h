@@ -2,6 +2,8 @@
 
 #include <QObject>
 
+#include <set>
+
 struct ForwardRule;
 
 using InterfaceRules = std::map<QString, std::vector<ForwardRule>>;
@@ -43,5 +45,9 @@ signals:
 private:
     std::map<QString, IFACE_STATUS> ifaceStatuses;
     InterfaceRules interfaceRules;
+
+    std::map<std::string, std::set<int16_t>> incomingPortFilters;
+    std::map<std::pair<std::string, int16_t>, std::tuple<std::string, std::string, int16_t>> ifacePortRoutes;
+
     std::map<QString, std::string> macTable;
 };

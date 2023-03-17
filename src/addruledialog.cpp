@@ -45,7 +45,9 @@ void AddRuleDialog::setupUi()
     auto formLayout = new QFormLayout;
 
     formLayout->addRow(tr("Source interface:"), ui.sourceInterface);
+#if 0
     formLayout->addRow(tr("Source ip4:"), ui.sourceIp4);
+#endif
     formLayout->addRow(tr("Source port:"), ui.sourcePort);
 
     formLayout->addRow(tr("Destination interface:"), ui.destinationInterface);
@@ -91,8 +93,7 @@ void AddRuleDialog::populateInterfaces()
 
 bool AddRuleDialog::validateRule() const
 {
-    auto sourceIface = pcpp::PcapLiveDeviceList::getInstance().getPcapLiveDeviceByName(ui.sourceInterface->currentData().toString().toStdString());
-
+#if 0
     if (ui.sourceIp4->text() != "*") {
         pcpp::IPv4Address addr(ui.sourceIp4->text().toStdString());
         if (!addr.isValid()) {
@@ -100,8 +101,9 @@ bool AddRuleDialog::validateRule() const
             return false;
         }
     }
+#endif
 
-    if (ui.sourcePort->text() != "*") {
+    {
         bool res { false };
         auto sourcePort = ui.sourcePort->text().toInt(&res);
         if (!(res && sourcePort > 0 && sourcePort <= 65535)) {
@@ -109,13 +111,15 @@ bool AddRuleDialog::validateRule() const
         }
     }
 
-    pcpp::IPv4Address addr(ui.destinationIp4->text().toStdString());
-    if (!addr.isValid()) {
-        QMessageBox::critical(const_cast<AddRuleDialog*>(this), QString("Destination ip address error"), QString("Given Destination ip address [%1] is invalid").arg(ui.destinationIp4->text()));
-        return false;
+    {
+        pcpp::IPv4Address addr(ui.destinationIp4->text().toStdString());
+        if (!addr.isValid()) {
+            QMessageBox::critical(const_cast<AddRuleDialog*>(this), QString("Destination ip address error"), QString("Given Destination ip address [%1] is invalid").arg(ui.destinationIp4->text()));
+            return false;
+        }
     }
 
-    if (ui.destinationPort->text() != "*") {
+    {
         bool res { false };
         auto destinationPort = ui.destinationPort->text().toInt(&res);
         if (!(res && destinationPort > 0 && destinationPort <= 65535)) {

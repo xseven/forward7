@@ -9,7 +9,7 @@
 #include "UdpLayer.h"
 
 // namespace {
-void onPacket(pcpp::RawPacket* rawPacket, pcpp::PcapLiveDevice* dev, void* cookie)
+void onPacket(pcpp::RawPacket* rawPacket, pcpp::PcapLiveDevice* device, void* cookie)
 {
     auto forwardWorker = reinterpret_cast<ForwardWorker*>(cookie);
 
@@ -17,21 +17,52 @@ void onPacket(pcpp::RawPacket* rawPacket, pcpp::PcapLiveDevice* dev, void* cooki
 
     if (packet.isPacketOfType(pcpp::UDP)) {
 
-        auto iface = QString::fromStdString(dev->getName());
+        auto iface = QString::fromStdString(device->getName());
 
         const auto& macTable = forwardWorker->macTable;
         const auto& ifaceRules = forwardWorker->interfaceRules;
 
-        auto ip4Layer
-            = packet.getLayerOfType<pcpp::IPv4Layer>();
+        auto ip4Layer = packet.getLayerOfType<pcpp::IPv4Layer>();
         if (ip4Layer) {
+#if 0
             qDebug() << "[ip layer] src: " << QString::fromStdString(ip4Layer->getSrcIPv4Address().toString())
                      << " dst: " << QString::fromStdString(ip4Layer->getDstIPv4Address().toString());
-        }
+#endif
+            //[Outgoing packet. Skip it]
+            if (device->getIPv4Address() == ip4Layer->getSrcIPAddress()) {
+                return;
+            }
 
-        auto udpLayer = packet.getLayerOfType<pcpp::UdpLayer>();
-        if (udpLayer) {
-            qDebug() << "[udp layer] port: " << udpLayer->getDstPort();
+            auto udpLayer = packet.getLayerOfType<pcpp::UdpLayer>();
+            if (udpLayer) {
+                if (forwardWorker->incomingPortFilters[device->getName()].count(udpLayer->getDstPort()) == 0) {
+                    return;
+                }
+                auto routeKey = std::make_pair(device->getName(), udpLayer->getDstPort());
+
+                if (forwardWorker->ifacePortRoutes.contains(routeKey)) {
+                    auto [destIface, destIp, destPort] = forwardWorker->ifacePortRoutes.at(routeKey);
+
+                    auto destDevice = pcpp::PcapLiveDeviceList::getInstance().getPcapLiveDeviceByName(destIface);
+                    auto destMac = macTable.at(QString("%1-%2").arg(QString::fromStdString(destDevice->getName())).arg(QString::fromStdString(destIp)));
+
+                    {
+                        pcpp::EthLayer newEthLayer(destDevice->getMacAddress(), destMac);
+                        pcpp::IPv4Layer newIpLayer(destDevice->getIPv4Address(), pcpp::IPv4Address(destIp));
+                        pcpp::UdpLayer newUdpLayer(udpLayer->getDstPort(), destPort);
+
+                        pcpp::Packet newPacket(128);
+
+                        newPacket.addLayer(&newEthLayer);
+                        newPacket.addLayer(&newIpLayer);
+                        newPacket.addLayer(&newUdpLayer);
+
+                        newPacket.computeCalculateFields();
+
+                        destDevice->sendPacket(&newPacket);
+                    }
+                }
+            }
         }
     }
 }
@@ -86,82 +117,21 @@ void ForwardWorker::openDevicesAndCheck()
 
 void ForwardWorker::createFiltersForDevices(const InterfaceRules& interfaceRules)
 {
-    std::vector<pcpp::GeneralFilter*> filterPointers;
-
-    pcpp::AndFilter andFilter;
-
-    //[]
-    pcpp::ProtoFilter protocolFilter(pcpp::UDP);
-    andFilter.addFilter(&protocolFilter);
-
     for (const auto& i : interfaceRules) {
         auto iface = i.first;
         auto rules = i.second;
 
-        //[]
         auto device = pcpp::PcapLiveDeviceList::getInstance().getPcapLiveDeviceByName(iface.toStdString());
-
-        auto localDestinationIpOrFilter = new pcpp::OrFilter;
-        filterPointers.push_back(localDestinationIpOrFilter);
-
-        //[Local dest]
         auto deviceIp = device->getIPv4Address();
 
-        auto localIpFilter = new pcpp::IPFilter(deviceIp.toString(), pcpp::DST);
-        filterPointers.push_back(localIpFilter);
-        localDestinationIpOrFilter->addFilter(localIpFilter);
-
-        //[Local broadcast dest]
-        QString localBroadcastIp;
-        {
-            auto s = QString::fromStdString(deviceIp.toString()).split('.', Qt::SkipEmptyParts);
-            s[3] = "255";
-            localBroadcastIp = s.join('.');
-        }
-
-        auto localBroadcastIpFilter = new pcpp::IPFilter(localBroadcastIp.toStdString(), pcpp::DST);
-        filterPointers.push_back(localBroadcastIpFilter);
-        localDestinationIpOrFilter->addFilter(localBroadcastIpFilter);
-
-        andFilter.addFilter(localDestinationIpOrFilter);
-
-        //[]
-        auto rulesOrFilter = new pcpp::OrFilter;
-        filterPointers.push_back(rulesOrFilter);
-
         for (const auto& rule : rules) {
-            auto ruleAndFilter = new pcpp::AndFilter;
-            filterPointers.push_back(ruleAndFilter);
+            incomingPortFilters[device->getName()].insert(rule.sourcePort.toInt());
 
-            if (rule.sourceIp4.isValid()) {
-                auto ipFilter = new pcpp::IPFilter(rule.sourceIp4.toString().toStdString(), pcpp::SRC);
-                filterPointers.push_back(ipFilter);
-
-                ruleAndFilter->addFilter(ipFilter);
-            }
-
-            if (rule.sourcePort.isValid()) {
-                auto portFilter = new pcpp::PortFilter(rule.sourcePort.toInt(), pcpp::DST);
-                filterPointers.push_back(portFilter);
-
-                ruleAndFilter->addFilter(portFilter);
-            }
-
-            rulesOrFilter->addFilter(ruleAndFilter);
+            ifacePortRoutes[std::make_pair(device->getName(), rule.sourcePort.toInt())] = std::make_tuple(
+                rule.destinationInterfaceName.toString().toStdString(),
+                rule.destinationIp4.toString().toStdString(),
+                rule.destinationPort.toInt());
         }
-
-        andFilter.addFilter(rulesOrFilter);
-
-        if (ifaceStatuses.at(iface) == IFACE_STATUS::VALID) {
-            auto device = pcpp::PcapLiveDeviceList::getInstance().getPcapLiveDeviceByName(iface.toStdString());
-            device->setFilter(andFilter);
-        }
-
-        for (auto p : filterPointers) {
-            delete p;
-        }
-
-        filterPointers.clear();
     }
 }
 
