@@ -74,3 +74,6 @@ Common++
 )
 
 target_link_libraries(forward7 PRIVATE ${QT_LIBS} ${PCAP-PP_LIBS})
+
+#
+add_executable(needle7 src/needle7.cpp)

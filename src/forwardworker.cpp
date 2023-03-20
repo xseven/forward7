@@ -4,7 +4,9 @@
 
 #include "EthLayer.h"
 #include "IPv4Layer.h"
+#include "IcmpLayer.h"
 #include "NetworkUtils.h"
+#include "PayloadLayer.h"
 #include "PcapLiveDeviceList.h"
 #include "UdpLayer.h"
 
@@ -38,6 +40,9 @@ void onPacket(pcpp::RawPacket* rawPacket, pcpp::PcapLiveDevice* device, void* co
                 if (forwardWorker->incomingPortFilters[device->getName()].count(udpLayer->getDstPort()) == 0) {
                     return;
                 }
+
+                udpLayer->getLayerPayload();
+
                 auto routeKey = std::make_pair(device->getName(), udpLayer->getDstPort());
 
                 if (forwardWorker->ifacePortRoutes.contains(routeKey)) {
@@ -49,17 +54,24 @@ void onPacket(pcpp::RawPacket* rawPacket, pcpp::PcapLiveDevice* device, void* co
                     {
                         pcpp::EthLayer newEthLayer(destDevice->getMacAddress(), destMac);
                         pcpp::IPv4Layer newIpLayer(destDevice->getIPv4Address(), pcpp::IPv4Address(destIp));
+                        newIpLayer.getIPv4Header()->timeToLive = 128;
                         pcpp::UdpLayer newUdpLayer(udpLayer->getDstPort(), destPort);
 
-                        pcpp::Packet newPacket(128);
+                        auto payloadLayer = packet.getLayerOfType<pcpp::PayloadLayer>();
+                        if (payloadLayer) {
+                            pcpp::PayloadLayer newPayloadLayer(payloadLayer->getPayload(), payloadLayer->getPayloadLen(), false);
 
-                        newPacket.addLayer(&newEthLayer);
-                        newPacket.addLayer(&newIpLayer);
-                        newPacket.addLayer(&newUdpLayer);
+                            pcpp::Packet newPacket(128);
 
-                        newPacket.computeCalculateFields();
+                            newPacket.addLayer(&newEthLayer);
+                            newPacket.addLayer(&newIpLayer);
+                            newPacket.addLayer(&newUdpLayer);
+                            newPacket.addLayer(&newPayloadLayer);
 
-                        destDevice->sendPacket(&newPacket);
+                            newPacket.computeCalculateFields();
+
+                            destDevice->sendPacket(&newPacket);
+                        }
                     }
                 }
             }
@@ -156,10 +168,24 @@ void ForwardWorker::createRoutes(const InterfaceRules& interfaceRules)
                     arpRespTime,
                     destDevice->getMacAddress(),
                     destDevice->getIPv4Address(),
-                    5);
+                    10);
 
-                if (destMac.isValid()) {
+                if (destMac.isValid() && destMac != destMac.Zero) {
                     macTable[tableKey] = destMac.toString();
+                } else {
+                    auto destIpSplit = destIp.split('.');
+                    destIpSplit.back() = 0;
+                    auto destMacRouter = pcpp::NetworkUtils::getInstance().getMacAddress(
+                        pcpp::IPv4Address(destIpSplit.join('.').toStdString()),
+                        destDevice,
+                        arpRespTime,
+                        destDevice->getMacAddress(),
+                        destDevice->getIPv4Address(),
+                        10);
+
+                    if (destMacRouter.isValid()) {
+                        macTable[tableKey] = destMacRouter.toString();
+                    }
                 }
             }
         }
