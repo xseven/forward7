@@ -180,7 +180,7 @@ void MainWindow::addRule()
 
     if (addRuleDialog.exec() == QDialog::Accepted) {
         auto rule = addRuleDialog.rule();
-        qDebug() << rule.toString();
+        qDebug().noquote() << rule.toString();
 
         auto item = new QListWidgetItem();
         item->setText(rule.name);

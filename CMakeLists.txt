@@ -60,6 +60,8 @@ ${pcap-pp_BINARY_DIR}/Pcap++
 ${pcap-pp_BINARY_DIR}/Common++
 )
 
+target_compile_definitions(forward7 PRIVATE NOMINMAX)
+
 #
 set(QT_LIBS
 Qt6::Core 

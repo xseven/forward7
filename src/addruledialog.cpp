@@ -23,31 +23,34 @@ AddRuleDialog::AddRuleDialog(QWidget* parent)
 
 void AddRuleDialog::setupUi()
 {
-    //[]
+    setWindowTitle(tr("Add forward rule"));
+
+    //[Source]
     ui.sourceInterface = new QComboBox(this);
 
     ui.sourceIp4 = new QLineEdit(this);
     ui.sourceIp4->setText("*");
+    ui.sourceIp4->setReadOnly(true);
+
     ui.sourcePort = new QLineEdit(this);
     ui.sourcePort->setText("*");
 
-    //[]
+    //[Destination]
     ui.destinationInterface = new QComboBox(this);
 
     ui.destinationIp4 = new QLineEdit(this);
+
     ui.destinationPort = new QLineEdit(this);
     ui.destinationPort->setText("*");
 
-    //[]
+    //[Standard buttons]
     ui.buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
 
-    //[]
+    //[Layout]
     auto formLayout = new QFormLayout;
 
     formLayout->addRow(tr("Source interface:"), ui.sourceInterface);
-#if 0
     formLayout->addRow(tr("Source ip4:"), ui.sourceIp4);
-#endif
     formLayout->addRow(tr("Source port:"), ui.sourcePort);
 
     formLayout->addRow(tr("Destination interface:"), ui.destinationInterface);
@@ -68,6 +71,16 @@ void AddRuleDialog::setupUiConnections()
 
     connect(ui.buttonBox, &QDialogButtonBox::rejected, this, [this]() {
         reject();
+    });
+
+    connect(ui.sourceInterface, &QComboBox::currentIndexChanged, this, [this]() {
+        auto ifaceName = ui.sourceInterface->currentData().toString().toStdString();
+
+        auto device = pcpp::PcapLiveDeviceList::getInstance().getPcapLiveDeviceByName(ifaceName);
+
+        if (device) {
+            ui.sourceIp4->setText(QString::fromStdString(device->getIPv4Address().toString()));
+        }
     });
 
     connect(ui.destinationInterface, &QComboBox::currentIndexChanged, this, [this]() {
@@ -93,21 +106,23 @@ void AddRuleDialog::populateInterfaces()
 
 bool AddRuleDialog::validateRule() const
 {
-#if 0
-    if (ui.sourceIp4->text() != "*") {
-        pcpp::IPv4Address addr(ui.sourceIp4->text().toStdString());
-        if (!addr.isValid()) {
-            QMessageBox::critical(const_cast<AddRuleDialog*>(this), QString("Source ip address error"), QString("Given source ip address [%1] is invalid").arg(ui.sourceIp4->text()));
-            return false;
+    {
+        if (ui.sourceIp4->text() != "*") {
+            pcpp::IPv4Address addr(ui.sourceIp4->text().toStdString());
+            if (!addr.isValid()) {
+                QMessageBox::critical(const_cast<AddRuleDialog*>(this), QString("Source ip address error"), QString("Given source ip address [%1] is invalid").arg(ui.sourceIp4->text()));
+                return false;
+            }
         }
     }
-#endif
 
     {
         bool res { false };
+
         auto sourcePort = ui.sourcePort->text().toInt(&res);
-        if (!(res && sourcePort > 0 && sourcePort <= 65535)) {
+        if (!(res && sourcePort > std::numeric_limits<uint16_t>::min() && sourcePort <= std::numeric_limits<uint16_t>::max())) {
             QMessageBox::critical(const_cast<AddRuleDialog*>(this), QString("Source port error"), QString("Given source port [%1] is invalid").arg(ui.sourcePort->text()));
+            return false;
         }
     }
 
@@ -121,8 +136,9 @@ bool AddRuleDialog::validateRule() const
 
     {
         bool res { false };
+
         auto destinationPort = ui.destinationPort->text().toInt(&res);
-        if (!(res && destinationPort > 0 && destinationPort <= 65535)) {
+        if (!(res && destinationPort > std::numeric_limits<uint16_t>::min() && destinationPort <= std::numeric_limits<uint16_t>::max())) {
             QMessageBox::critical(const_cast<AddRuleDialog*>(this), QString("Destination port error"), QString("Given destination port [%1] is invalid").arg(ui.destinationPort->text()));
             return false;
         }
@@ -133,23 +149,28 @@ bool AddRuleDialog::validateRule() const
 
 ForwardRule AddRuleDialog::rule() const
 {
-    static int n { 0 };
-
     ForwardRule res;
 
-    res.name = QString("rule #%1").arg(n++);
+    res.name = QStringLiteral("[%1:%2] -> [%3:%4]")
+                   .arg(ui.sourceIp4->text())
+                   .arg(ui.sourcePort->text())
+                   .arg(ui.destinationIp4->text())
+                   .arg(ui.destinationPort->text());
 
     //[]
     res.sourceInterfaceName = ui.sourceInterface->currentData();
+    res.sourceInterfaceDesc = ui.sourceInterface->currentText();
 
     if (ui.sourceIp4->text() != "*")
-        res.sourceInterfaceName = ui.sourceIp4->text();
+        res.sourceIp4 = ui.sourceIp4->text();
 
     if (ui.sourcePort->text() != "*")
         res.sourcePort = ui.sourcePort->text();
 
     //[]
     res.destinationInterfaceName = ui.destinationInterface->currentData();
+    res.destinationInterfaceDesc = ui.destinationInterface->currentText();
+
     res.destinationIp4 = ui.destinationIp4->text();
 
     if (ui.destinationPort->text() != "*")
