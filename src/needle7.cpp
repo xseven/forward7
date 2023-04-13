@@ -14,7 +14,7 @@
 #define FREE(x) HeapFree(GetProcessHeap(), 0, (x))
 
 /* Note: could also use malloc() and free() */
-
+#if 0
 int main()
 {
 
@@ -159,7 +159,7 @@ int main()
         return 1;
     }
 }
-#if 0
+#else
 #include <WinSock2.h>
 #include <Windows.h>
 #include <Ws2tcpip.h>
@@ -189,7 +189,8 @@ void CALLBACK f(HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime)
         PostQuitMessage(0);
     }
 
-    const auto payload = std::format("src: {} dst: {} port: {}", srcIp, dstIp, dstPort);
+    // const auto payload = std::format("src: {} dst: {} port: {}", srcIp, dstIp, dstPort);
+    const std::string payload(3000, '*');
 
     sockaddr_in dest;
     sockaddr_in local;

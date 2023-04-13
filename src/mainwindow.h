@@ -45,6 +45,8 @@ private:
     } ui;
 
     struct {
+        QAction* saveRules;
+        QAction* loadRules;
         QAction* switchState;
         QAction* addRule;
     } action;

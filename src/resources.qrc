@@ -3,5 +3,7 @@
         <file alias="add_circle.png">../img/add_circle.png</file>
         <file alias="sync.png">../img/sync.png</file>
         <file alias="sync_disabled.png">../img/sync_disabled.png</file>
+        <file alias="file_open.png">../img/file_open.png</file>
+        <file alias="file_save.png">../img/file_save.png</file>
     </qresource>
 </RCC>

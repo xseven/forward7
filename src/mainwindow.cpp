@@ -14,12 +14,14 @@
 #include <QBoxLayout>
 #include <QCoreApplication>
 #include <QDockWidget>
+#include <QFileDialog>
 #include <QLabel>
 #include <QListWidget>
 #include <QMenu>
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QScrollBar>
+#include <QSettings>
 #include <QStateMachine>
 #include <QToolBar>
 
@@ -89,6 +91,9 @@ void MainWindow::setupUi()
 {
     //[]
     auto operationsToolBar = addToolBar(tr("Operations"));
+    action.loadRules = operationsToolBar->addAction(QIcon(":/file_open.png"), tr("Load rules"));
+    action.saveRules = operationsToolBar->addAction(QIcon(":/file_save.png"), tr("Save rules"));
+    operationsToolBar->addSeparator();
     action.switchState = operationsToolBar->addAction(QIcon(":/sync.png"), tr("Start forwarding"));
     operationsToolBar->addSeparator();
     action.addRule = operationsToolBar->addAction(QIcon(":/add_circle.png"), tr("Add forwarding rules"));
@@ -123,6 +128,76 @@ void MainWindow::setupUi()
 
 void MainWindow::setupUiConnections()
 {
+    connect(action.saveRules, &QAction::triggered, this, [this]() {
+        auto fileNameToSave = QFileDialog::getSaveFileName(this, tr("Save current rules"), QString(), tr("Forwarder rules (*.f7r)"));
+#if 0    
+        QFileDialog dialog(this);
+        dialog.setFileMode(QFileDialog::AnyFile);
+        dialog.setNameFilter(tr("Rules (*.f7r)"));
+        dialog.setAcceptMode(QFileDialog::AcceptSave);
+
+        dialog.exec();
+#endif
+
+        if (!fileNameToSave.isEmpty()) {
+            QSettings rulesFile(fileNameToSave, QSettings::IniFormat);
+
+            rulesFile.beginWriteArray("rules");
+            const auto& r = rules();
+
+            for (auto i = 0; i < r.size(); ++i) {
+
+                rulesFile.setArrayIndex(i);
+                rulesFile.setValue("name", r.at(i).name);
+
+                rulesFile.setValue("destinationInterfaceDesc", r.at(i).destinationInterfaceDesc);
+                rulesFile.setValue("destinationInterfaceName", r.at(i).destinationInterfaceName);
+                rulesFile.setValue("destinationIp4", r.at(i).destinationIp4);
+                rulesFile.setValue("destinationPort", r.at(i).destinationPort);
+
+                rulesFile.setValue("sourceInterfaceDesc", r.at(i).sourceInterfaceDesc);
+                rulesFile.setValue("sourceInterfaceName", r.at(i).sourceInterfaceName);
+                rulesFile.setValue("sourceIp4", r.at(i).sourceIp4);
+                rulesFile.setValue("sourcePort", r.at(i).sourcePort);
+            }
+
+            rulesFile.endArray();
+
+            rulesFile.sync();
+        }
+    });
+
+    connect(action.loadRules, &QAction::triggered, this, [this]() {
+        auto fileNameToOpen = QFileDialog::getOpenFileName(this, tr("Load rules"), QString(), tr("Forwarder rules (*.f7r)"));
+
+        QSettings rulesFile(fileNameToOpen, QSettings::IniFormat);
+
+        int size = rulesFile.beginReadArray("rules");
+        for (int i = 0; i < size; ++i) {
+            rulesFile.setArrayIndex(i);
+            ForwardRule r;
+            r.name = rulesFile.value("name").toString();
+
+            r.destinationInterfaceDesc = rulesFile.value("destinationInterfaceDesc");
+            r.destinationInterfaceName = rulesFile.value("destinationInterfaceName");
+            r.destinationIp4 = rulesFile.value("destinationIp4");
+            r.destinationPort = rulesFile.value("destinationPort");
+
+            r.sourceInterfaceDesc = rulesFile.value("sourceInterfaceDesc");
+            r.sourceInterfaceName = rulesFile.value("sourceInterfaceName");
+            r.sourceIp4 = rulesFile.value("sourceIp4");
+            r.sourcePort = rulesFile.value("sourcePort");
+
+            auto item = new QListWidgetItem();
+            item->setText(r.name);
+            item->setData(Qt::UserRole, QVariant::fromValue(r));
+
+            ui.rules->addItem(item);
+        }
+
+        rulesFile.endArray();
+    });
+
     connect(action.addRule, &QAction::triggered, this, &MainWindow::addRule);
     connect(ui.rules, &QListWidget::customContextMenuRequested, this, &MainWindow::rulesContextMenu);
 }
